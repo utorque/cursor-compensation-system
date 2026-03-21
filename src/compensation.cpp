@@ -159,15 +159,18 @@ void CompensationEngine::runLoop(const std::string& macroUUID, std::atomic<bool>
             std::this_thread::sleep_for(duration<float, std::milli>(stepMs));
         } else {
             // Linear interpolation across sub-steps (Smoothing function from README)
-            float prevX = 0.0f, prevY = 0.0f;
+            // Use error accumulation (Bresenham-style) so fractional pixel amounts
+            // carry over between sub-steps instead of being independently rounded to 0.
+            float errX = 0.0f, errY = 0.0f;
             float subMs = stepMs / (float)smoothSteps;
-            for (int s = 1; s <= smoothSteps && running->load(); ++s) {
-                float xi = (float)s * dx_f / (float)smoothSteps;
-                float yi = (float)s * dy_f / (float)smoothSteps;
-                int sdx = (int)std::round(xi - prevX);
-                int sdy = (int)std::round(yi - prevY);
+            for (int s = 0; s < smoothSteps && running->load(); ++s) {
+                errX += dx_f / (float)smoothSteps;
+                errY += dy_f / (float)smoothSteps;
+                int sdx = (int)std::round(errX);
+                int sdy = (int)std::round(errY);
+                errX -= (float)sdx;
+                errY -= (float)sdy;
                 sendMouseMove(sdx, sdy);
-                prevX = xi; prevY = yi;
                 std::this_thread::sleep_for(duration<float, std::milli>(subMs));
             }
         }
