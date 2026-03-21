@@ -57,14 +57,16 @@ static struct {
     char        offsetX[1 << 16] = {};
     char        offsetY[1 << 16] = {};
     float       rpm               = 600.0f;
+    bool        semi              = false;
     char        err[256]          = {};
 } g_pe;
 
 static void openNewProfile() {
-    g_pe = {};
+    g_pe       = {};
     g_pe.open  = true;
     g_pe.isNew = true;
     g_pe.rpm   = 600.0f;
+    g_pe.semi  = false;
 }
 
 static void openEditProfile(const Profile& p) {
@@ -73,6 +75,7 @@ static void openEditProfile(const Profile& p) {
     g_pe.isNew = false;
     g_pe.uuid  = p.uuid;
     g_pe.rpm   = p.rpm;
+    g_pe.semi  = p.semi;
     strncpy_s(g_pe.name,    p.name.c_str(),              _TRUNCATE);
     auto xs = formatFloatCSV(p.offset_x);
     auto ys = formatFloatCSV(p.offset_y);
@@ -123,6 +126,21 @@ static void renderProfileEditor() {
     if (!ImGui::Begin(title, &g_pe.open)) { ImGui::End(); return; }
 
     ImGui::InputText("Name##pe", g_pe.name, sizeof(g_pe.name));
+
+    ImGui::Spacing();
+    ImGui::Text("Fire mode:");
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Automatic##pe", !g_pe.semi)) g_pe.semi = false;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Hold macro button — software holds LMB and sends\n"
+                          "one movement per dt (60000/RPM ms) automatically.");
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Semi##pe", g_pe.semi)) g_pe.semi = true;
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Each press of the macro button sends one movement step\n"
+                          "+ one LMB click. Pressing again within 4×dt advances\n"
+                          "to the next step; waiting longer resets to step 0.");
+
     ImGui::InputFloat("RPM##pe", &g_pe.rpm, 1.0f, 10.0f, "%.1f");
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("Steps per minute — sets inter-step delay to 60000/RPM ms.");
@@ -161,6 +179,7 @@ static void renderProfileEditor() {
             p.uuid     = g_pe.isNew ? generateUUID() : g_pe.uuid;
             p.name     = g_pe.name;
             p.rpm      = g_pe.rpm;
+            p.semi     = g_pe.semi;
             p.offset_x = parseFloatCSV(g_pe.offsetX);
             p.offset_y = parseFloatCSV(g_pe.offsetY);
             p.updateBullets();
@@ -491,9 +510,11 @@ static void renderSettingsTab() {
     ImGui::Separator();
 
     bool dirty = false;
-    dirty |= ImGui::SliderFloat("Sensitivity", &s.sensitivity, 0.05f, 3.0f, "%.3f");
+    dirty |= ImGui::SliderFloat("Sensitivity", &s.sensitivity, 0.05f, 20.0f, "%.3f");
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Input sensitivity scalar (game setting).");
+        ImGui::SetTooltip("In-game sensitivity value.\n"
+                          "Typical range: 1–10. Low values produce a tiny screenMul\n"
+                          "and will cause no movement — check the computed value below.");
 
     dirty |= ImGui::SliderFloat("FOV", &s.fov, 20.0f, 150.0f, "%.1f");
     if (ImGui::IsItemHovered())

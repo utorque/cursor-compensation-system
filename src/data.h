@@ -43,6 +43,7 @@ struct Profile {
     std::vector<float> offset_y;   // vertical delta per step   (abstract units)
     float rpm     = 600.0f;        // action rate — steps per minute
     int   bullets = 0;             // auto-derived: min(offset_x.size, offset_y.size)
+    bool  semi    = false;         // true = semi-auto (one click → one step + LMB click)
 
     void updateBullets() {
         bullets = (int)std::min(offset_x.size(), offset_y.size());
@@ -55,7 +56,8 @@ struct Profile {
             {"offset_x", offset_x},
             {"offset_y", offset_y},
             {"rpm",      rpm},
-            {"bullets",  bullets}
+            {"bullets",  bullets},
+            {"semi",     semi}
         };
     }
 
@@ -67,6 +69,7 @@ struct Profile {
         p.offset_y = j.value("offset_y", std::vector<float>{});
         p.rpm      = j.value("rpm",      600.0f);
         p.bullets  = j.value("bullets",  0);
+        p.semi     = j.value("semi",     false);
         return p;
     }
 };
