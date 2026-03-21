@@ -2,6 +2,11 @@
 #include "app.h"
 #include "debug.h"
 
+// Only logs when Advanced Debug is enabled
+#define ADLOG(cat, msg) \
+    do { if (DebugLog::get().advancedEnabled.load(std::memory_order_relaxed)) \
+             DebugLog::get().log(cat, msg); } while(0)
+
 #include <cmath>
 #include <random>
 #include <chrono>
@@ -20,11 +25,14 @@ CompensationEngine& CompensationEngine::get() {
 }
 
 void CompensationEngine::sendMouseMove(int dx, int dy) {
-    if (dx == 0 && dy == 0) return;
+    if (dx == 0 && dy == 0) {
+        ADLOG("MOVE", "skipped (0,0)");
+        return;
+    }
     INPUT in{};
-    in.type    = INPUT_MOUSE;
-    in.mi.dx   = dx;
-    in.mi.dy   = dy;
+    in.type       = INPUT_MOUSE;
+    in.mi.dx      = dx;
+    in.mi.dy      = dy;
     in.mi.dwFlags = MOUSEEVENTF_MOVE;
     UINT sent = SendInput(1, &in, sizeof(INPUT));
     if (sent == 0) {
@@ -142,8 +150,14 @@ void CompensationEngine::runLoop(const std::string& macroUUID, std::atomic<bool>
 
     float lastDx_f = 0.0f, lastDy_f = 0.0f;
 
+    // Persistent sub-pixel accumulator — carries fractional remainders across
+    // ALL bullets and sub-steps so small per-step values build up over time.
+    float accX = 0.0f, accY = 0.0f;
+    int   stepIdx = 0;
+
     auto applyStep = [&](float ox, float oy) {
-        // randomness
+        int curStep = stepIdx++;
+
         float rx = 1.0f + dist(rngEng);
         float ry = 1.0f + dist(rngEng);
         ox *= rx;
@@ -155,22 +169,40 @@ void CompensationEngine::runLoop(const std::string& macroUUID, std::atomic<bool>
         lastDy_f = dy_f;
 
         if (smoothSteps <= 1) {
-            sendMouseMove((int)std::round(dx_f), (int)std::round(dy_f));
+            accX += dx_f;
+            accY += dy_f;
+            int idx = (int)std::round(accX);
+            int idy = (int)std::round(accY);
+            accX -= (float)idx;
+            accY -= (float)idy;
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf),
+                    "step[%d] ox=%.4f oy=%.4f  dx=%.4f dy=%.4f  send=(%d,%d)  rem=(%.4f,%.4f)",
+                    curStep, ox, oy, dx_f, dy_f, idx, idy, accX, accY);
+                ADLOG("STEP", buf);
+            }
+            sendMouseMove(idx, idy);
             std::this_thread::sleep_for(duration<float, std::milli>(stepMs));
         } else {
-            // Linear interpolation across sub-steps (Smoothing function from README)
-            // Use error accumulation (Bresenham-style) so fractional pixel amounts
-            // carry over between sub-steps instead of being independently rounded to 0.
-            float errX = 0.0f, errY = 0.0f;
+            float subDx = dx_f / (float)smoothSteps;
+            float subDy = dy_f / (float)smoothSteps;
             float subMs = stepMs / (float)smoothSteps;
             for (int s = 0; s < smoothSteps && running->load(); ++s) {
-                errX += dx_f / (float)smoothSteps;
-                errY += dy_f / (float)smoothSteps;
-                int sdx = (int)std::round(errX);
-                int sdy = (int)std::round(errY);
-                errX -= (float)sdx;
-                errY -= (float)sdy;
-                sendMouseMove(sdx, sdy);
+                accX += subDx;
+                accY += subDy;
+                int idx = (int)std::round(accX);
+                int idy = (int)std::round(accY);
+                accX -= (float)idx;
+                accY -= (float)idy;
+                {
+                    char buf[128];
+                    snprintf(buf, sizeof(buf),
+                        "step[%d.%d] subDx=%.4f subDy=%.4f  send=(%d,%d)  rem=(%.4f,%.4f)",
+                        curStep, s, subDx, subDy, idx, idy, accX, accY);
+                    ADLOG("STEP", buf);
+                }
+                sendMouseMove(idx, idy);
                 std::this_thread::sleep_for(duration<float, std::milli>(subMs));
             }
         }

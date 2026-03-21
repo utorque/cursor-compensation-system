@@ -533,11 +533,22 @@ static void renderDebugTab() {
     if (ImGui::Checkbox("Enable Debug Mode", &en)) {
         dbg.enabled.store(en, std::memory_order_relaxed);
         if (en)  dbg.log("INFO", "Debug mode enabled");
-        else     dbg.log("INFO", "Debug mode disabled");
+        else   { dbg.log("INFO", "Debug mode disabled"); dbg.advancedEnabled.store(false); }
     }
     if (en)
         ImGui::SameLine(),
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.0f, 1.0f), "  LOGGING ACTIVE");
+
+    if (en) {
+        bool adv = dbg.advancedEnabled.load(std::memory_order_relaxed);
+        if (ImGui::Checkbox("Advanced Debug (thread internals: per-step values, SendInput calls)", &adv)) {
+            dbg.advancedEnabled.store(adv, std::memory_order_relaxed);
+            dbg.log("INFO", adv ? "Advanced debug enabled" : "Advanced debug disabled");
+        }
+        if (adv)
+            ImGui::SameLine(),
+            ImGui::TextColored(ImVec4(0.4f, 1.0f, 1.0f, 1.0f), "  VERBOSE");
+    }
 
     ImGui::Spacing();
 
@@ -595,6 +606,8 @@ static void renderDebugTab() {
                 ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "%s", e.category.c_str());
             else if (e.category == "MOVE")
                 ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", e.category.c_str());
+            else if (e.category == "STEP")
+                ImGui::TextColored(ImVec4(0.7f, 0.5f, 1.0f, 1.0f), "%s", e.category.c_str());
             else if (e.category == "EVENT")
                 ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "%s", e.category.c_str());
             else

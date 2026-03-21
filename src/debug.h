@@ -15,6 +15,7 @@ public:
     static DebugLog& get();
 
     std::atomic<bool> enabled{ false };
+    std::atomic<bool> advancedEnabled{ false };  // logs per-step thread internals
 
     void   log(const char* category, const std::string& msg);
     void   clear();
