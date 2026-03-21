@@ -63,6 +63,7 @@ target_link_libraries(CursorCompensation PRIVATE
     user32
     gdi32
     dwmapi
+    winmm        # timeBeginPeriod / timeEndPeriod
 )
 
 if(MSVC)
